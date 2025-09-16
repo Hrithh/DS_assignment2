@@ -13,8 +13,8 @@ public class AggregationServer {
     private static final int PORT = 9090;
     private static final Logger logger = Logger.getLogger(AggregationServer.class.getName());
 
+    private final List<WeatherRecord> weatherData = Collections.synchronizedList(new ArrayList<>());
     private final LamportClock clock = new LamportClock();
-    private final Map<String, WeatherRecord> weatherData = new ConcurrentHashMap<>();
     private final Gson gson = new Gson();
 
     public void start() {
@@ -62,8 +62,56 @@ public class AggregationServer {
 
     // Placeholder methods
     private void handlePutRequest(BufferedReader in, PrintWriter out) throws IOException {
-        logger.info("Handling PUT request...");
-        // [You will implement this in the next step]
+        try {
+            // 🔹 Read headers first
+            Map<String, String> headers = new HashMap<>();
+            String line;
+            while ((line = in.readLine()) != null && !line.isEmpty()) {
+                if (line.contains(":")) {
+                    String[] parts = line.split(":", 2);
+                    headers.put(parts[0].trim(), parts[1].trim());
+                }
+            }
+            // 1. Extract Lamport timestamp
+            int receivedTimestamp = Integer.parseInt(headers.getOrDefault("Lamport-Clock", "0"));
+            clock.update(receivedTimestamp);
+
+            // 2. Read Content-Length
+            int contentLength = Integer.parseInt(headers.get("Content-Length"));
+
+            // 3. Read JSON payload
+            char[] buffer = new char[contentLength];
+            in.read(buffer, 0, contentLength);
+            String payload = new String(buffer);
+
+            // 4. Parse JSON
+            Map<String, String> json = gson.fromJson(payload, Map.class);
+
+            String station = json.get("station");
+            String temperature = json.get("temperature");
+            String humidity = json.get("humidity");
+
+            // 5. Create and store record
+            WeatherRecord record = new WeatherRecord(
+                    station, temperature, humidity,
+                    clock.getTime(), System.currentTimeMillis()
+            );
+
+            weatherData.add(record);
+            logger.info("Stored weather data from station: " + station + " @ timestamp " + clock.getTime());
+
+            // 6. Respond to ContentServer
+            out.println("HTTP/1.1 200 OK");
+            out.println("Content-Type: text/plain");
+            out.println();
+            out.println("PUT received and recorded");
+
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error handling PUT request", e);
+            out.println("HTTP/1.1 500 Internal Server Error");
+            out.println();
+            out.println("Error processing PUT");
+        }
     }
 
     private void handleGetRequest(PrintWriter out) {
@@ -77,20 +125,4 @@ public class AggregationServer {
 
     }
 
-    // Simple record class to store weather info
-    private static class WeatherRecord {
-        String station;
-        String temperature;
-        String humidity;
-        long timestamp;
-        long lamportTime;
-
-        public WeatherRecord(String station, String temperature, String humidity, long timestamp, long lamportTime) {
-            this.station = station;
-            this.temperature = temperature;
-            this.humidity = humidity;
-            this.timestamp = timestamp;
-            this.lamportTime = lamportTime;
-        }
-    }
 }
