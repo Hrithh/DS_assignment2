@@ -34,22 +34,27 @@ public class ContentServer implements Runnable {
                 return;
             }
 
-            // Tick clock and build payload
-            WeatherData data = new WeatherData(
-                    weatherData[0],
-                    weatherData[1],
-                    weatherData[2],
-                    String.valueOf(clock.tick()),
-                    replicaId
-            );
+            while (true) {
+                // Tick Lamport clock and prepare data
+                WeatherData data = new WeatherData(
+                        weatherData[0],   // station
+                        weatherData[1],   // temperature
+                        weatherData[2],   // humidity
+                        String.valueOf(clock.tick()),
+                        replicaId
+                );
 
-            String jsonString = gson.toJson(data);
-            logger.info("[" + replicaId + "] Constructed JSON payload: " + jsonString);
+                String jsonString = gson.toJson(data);
+                logger.info("[" + replicaId + "] Sending data: " + jsonString);
+                sendPutRequest(jsonString);
 
-            // Send PUT request
-            logger.info("[" + replicaId + "] Sending PUT request to Aggregation Server at " + SERVER_HOST + ":" + SERVER_PORT);
-            sendPutRequest(jsonString);
+                // Wait 10 seconds
+                Thread.sleep(10_000);
+            }
 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warning("[" + replicaId + "] Interrupted and shutting down.");
         } catch (Exception e) {
             logger.log(Level.SEVERE, "[" + replicaId + "] Error running content server", e);
         }
@@ -98,7 +103,6 @@ public class ContentServer implements Runnable {
                     Thread.currentThread().interrupt();
                 }
             }
-
             attempt++;
         }
 
@@ -110,7 +114,14 @@ public class ContentServer implements Runnable {
     public static void main(String[] args) {
         String replicaId = (args.length > 0) ? args[0] : "replica1";
         String filename = (args.length > 1) ? args[1] : "weather1.txt";
+
         ContentServer server = new ContentServer(replicaId, filename);
-        server.run();
+        Thread serverThread = new Thread(server);
+        serverThread.start();
+
+        // Add shutdown hook to log termination
+        Runtime.getRuntime().addShutdownHook(new Thread(() ->
+                System.out.println("[" + replicaId + "] Content server stopped.")
+        ));
     }
 }
