@@ -44,7 +44,7 @@ public class ContentServer implements Runnable {
     }
 
     private String[] readWeatherFile() throws IOException {
-        InputStream inputStream = getClass().getResourceAsStream("/weather.txt");
+        InputStream inputStream = getClass().getClassLoader().getResourceAsStream("weather.txt");
         if (inputStream == null) {
             throw new FileNotFoundException("weather.txt not found in resources folder.");
         }
