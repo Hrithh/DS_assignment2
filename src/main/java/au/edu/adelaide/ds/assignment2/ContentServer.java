@@ -7,6 +7,13 @@ import java.util.logging.Level;
 
 import com.google.gson.Gson;
 
+/**
+ * ContentServer is a replica that:
+ * - Reads local weather data from a resource file
+ * - Periodically sends JSON-formatted weather data via HTTP PUT
+ * - Maintains and sends its Lamport timestamp for logical ordering
+ * - Retries failed PUTs up to 3 times
+ */
 public class ContentServer implements Runnable {
 
     private static final Logger logger = Logger.getLogger(ContentServer.class.getName());
@@ -19,11 +26,22 @@ public class ContentServer implements Runnable {
     private final LamportClock clock = new LamportClock();
     private final Gson gson = new Gson();
 
+    /**
+     * Constructs a ContentServer instance for the given replica.
+     * replicaId Unique name of this replica
+     * filename File containing weather data
+     */
     public ContentServer(String replicaId, String filename) {
         this.replicaId = replicaId;
         this.filename = filename;
     }
 
+    /**
+     * Main run loop of the content server:
+     * - Reads initial weather data from file
+     * - Sends PUT request every 10 seconds
+     * - Updates and includes Lamport clock value
+     */
     public void run() {
         try {
             logger.info("[" + replicaId + "] Reading weather data from file: " + filename);
@@ -60,6 +78,11 @@ public class ContentServer implements Runnable {
         }
     }
 
+    /**
+     * Reads the local weather data file packaged in the resources folder.
+     * Expected format: CSV, one line only: station,temperature,humidity,extra
+     * return String array of weather attributes, or empty if unreadable
+     */
     private String[] readWeatherFile() throws IOException {
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
         if (inputStream == null) {
@@ -71,6 +94,12 @@ public class ContentServer implements Runnable {
         }
     }
 
+    /**
+     * Sends an HTTP PUT request to the AggregationServer with the given JSON payload.
+     * Retries up to 3 times if connection fails or server error occurs.
+     * Includes "Lamport-Clock" as a custom header for logical timestamp tracking.
+     * jsonPayload The serialized WeatherData JSON string
+     */
     private void sendPutRequest(String jsonPayload) {
         int maxRetries = 3;
         int attempt = 0;
@@ -111,6 +140,12 @@ public class ContentServer implements Runnable {
         }
     }
 
+    /**
+     * Program entry point for starting a ContentServer replica.
+     * Accepts optional CLI args:
+     * - args[0]: replicaId (default "replica1")
+     * - args[1]: filename (default "weather1.txt")
+     */
     public static void main(String[] args) {
         String replicaId = (args.length > 0) ? args[0] : "replica1";
         String filename = (args.length > 1) ? args[1] : "weather1.txt";

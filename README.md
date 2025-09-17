@@ -43,7 +43,7 @@ Each Content Server:
 
 ### 3. **Start the Client**
 
-mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.Client"
+mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.GETClient"
 
 ---
 
