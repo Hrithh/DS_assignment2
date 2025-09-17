@@ -72,41 +72,36 @@ public class ContentServer implements Runnable {
         boolean success = false;
 
         while (attempt < maxRetries && !success) {
-            try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
-                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+            try {
+                HttpURLConnection connection = (HttpURLConnection) new URL("http://localhost:9090").openConnection();
+                connection.setDoOutput(true);
+                connection.setRequestMethod("PUT");
+                connection.setRequestProperty("Content-Type", "application/json");
+                connection.getOutputStream().write(jsonPayload.getBytes());
 
-                // Construct the PUT request
-                out.println("PUT /weather.json");
-                out.println("Lamport-Clock: " + clock.getTime());
-                out.println("Content-Length: " + jsonPayload.length());
-                out.println(); // End of headers
-                out.println(jsonPayload);
+                int responseCode = connection.getResponseCode();
 
-                // Read response
-                String response;
-                while ((response = in.readLine()) != null) {
-                    logger.info("[" + replicaId + "] Server response: " + response);
+                if (responseCode == 200) {
+                    System.out.println("[" + replicaId + "] Server response: PUT received and recorded");
+                    success = true;
+                } else {
+                    System.out.println("[" + replicaId + "] Server responded with: " + responseCode);
                 }
-
-                logger.info("PUT request completed successfully.");
-                success = true;
 
             } catch (IOException e) {
-                attempt++;
-                logger.warning("[" + replicaId + "] Attempt " + attempt + " failed: " + e.getMessage());
-                if (attempt < maxRetries) {
-                    logger.info("[" + replicaId + "] Retrying in 2 seconds...");
-                    try {
-                        Thread.sleep(2000);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt(); // Restore interrupted status
-                        return;
-                    }
-                } else {
-                    logger.severe("[" + replicaId + "] Failed to send PUT after " + maxRetries + " attempts.");
+                System.out.println("[" + replicaId + "] PUT failed (attempt " + (attempt + 1) + "): " + e.getMessage());
+                try {
+                    Thread.sleep(5000);  // wait 1s before retry
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                 }
             }
+
+            attempt++;
+        }
+
+        if (!success) {
+            System.out.println("[" + replicaId + "] PUT request failed after " + maxRetries + " attempts.");
         }
     }
 

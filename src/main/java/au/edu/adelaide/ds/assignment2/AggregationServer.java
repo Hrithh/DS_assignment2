@@ -90,7 +90,7 @@ public class AggregationServer {
     // Placeholder methods
     private void handlePutRequest(BufferedReader in, PrintWriter out) throws IOException {
         try {
-            // 🔹 Read headers first
+            // 1. Read headers
             Map<String, String> headers = new HashMap<>();
             String line;
             while ((line = in.readLine()) != null && !line.isEmpty()) {
@@ -99,35 +99,51 @@ public class AggregationServer {
                     headers.put(parts[0].trim(), parts[1].trim());
                 }
             }
-            // 1. Extract Lamport timestamp
-            int receivedTimestamp = Integer.parseInt(headers.getOrDefault("Lamport-Clock", "0"));
+
+            // 2. Extract Lamport timestamp (default to 0 if missing)
+            int receivedTimestamp;
+            try {
+                receivedTimestamp = Integer.parseInt(headers.get("Lamport-Clock"));
+            } catch (NumberFormatException | NullPointerException e) {
+                logger.warning("Invalid or missing Lamport-Clock header: " + headers.get("Lamport-Clock"));
+                out.println("HTTP/1.1 400 Bad Request");
+                out.println();
+                out.println("Invalid or missing Lamport-Clock header");
+                return;
+            }
             clock.update(receivedTimestamp);
 
-            // 2. Read Content-Length
+            // 3. Read Content-Length
             int contentLength = Integer.parseInt(headers.get("Content-Length"));
 
-            // 3. Read JSON payload
+            // 4. Read JSON payload from input stream
             char[] buffer = new char[contentLength];
-            in.read(buffer, 0, contentLength);
+            int read = in.read(buffer, 0, contentLength);
+            if (read != contentLength) {
+                throw new IOException("Incomplete payload read: expected " + contentLength + " chars, got " + read);
+            }
             String payload = new String(buffer);
 
-            // 4. Parse JSON
-            Map<String, String> json = gson.fromJson(payload, Map.class);
+            // 5. Parse JSON as Map<String, Object>
+            Map<String, Object> json = gson.fromJson(payload, Map.class);
 
-            String station = json.get("station");
-            String temperature = json.get("temperature");
-            String humidity = json.get("humidity");
+            // 6. Extract fields
+            String station = (String) json.get("station");
+            String temperature = String.valueOf(json.get("temperature")); // Allow string or numeric
+            String humidity = String.valueOf(json.get("humidity"));
 
-            // 5. Create and store record
+            // 7. Create and store WeatherRecord
             WeatherRecord record = new WeatherRecord(
-                    station, temperature, humidity,
-                    clock.getTime(), System.currentTimeMillis()
+                    station,
+                    temperature,
+                    humidity,
+                    clock.getTime(),
+                    System.currentTimeMillis()
             );
-
             weatherData.add(record);
             logger.info("Stored weather data from station: " + station + " @ timestamp " + clock.getTime());
 
-            // 6. Respond to ContentServer
+            // 8. Send 200 OK response
             out.println("HTTP/1.1 200 OK");
             out.println("Content-Type: text/plain");
             out.println();
@@ -137,7 +153,7 @@ public class AggregationServer {
             logger.log(Level.SEVERE, "Error handling PUT request", e);
             out.println("HTTP/1.1 500 Internal Server Error");
             out.println();
-            out.println("Error processing PUT");
+            out.println("Error processing PUT request");
         }
     }
 
