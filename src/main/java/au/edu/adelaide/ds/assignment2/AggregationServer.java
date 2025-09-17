@@ -21,6 +21,8 @@ public class AggregationServer {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             logger.info("Aggregation Server started on port " + PORT);
 
+            startCleanupThread();
+
             while (true) {
                 Socket clientSocket = serverSocket.accept();
                 logger.info("Accepted connection from " + clientSocket.getRemoteSocketAddress());
@@ -30,6 +32,31 @@ public class AggregationServer {
         } catch (IOException e) {
             logger.log(Level.SEVERE, "Server error", e);
         }
+    }
+
+    private void startCleanupThread() {
+        Thread cleanupThread = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(5000); // Run every 5 seconds
+                    long now = System.currentTimeMillis();
+
+                    synchronized (weatherData) {
+                        weatherData.removeIf(record ->
+                                now - record.getReceivedTime() > 30_000
+                        );
+                    }
+
+                    logger.info("Expired records cleaned up.");
+                } catch (InterruptedException e) {
+                    logger.warning("Cleanup thread interrupted.");
+                    break;
+                }
+            }
+        });
+
+        cleanupThread.setDaemon(true); // Daemon so it doesn’t block JVM shutdown
+        cleanupThread.start();
     }
 
     private class ClientHandler implements Runnable {
