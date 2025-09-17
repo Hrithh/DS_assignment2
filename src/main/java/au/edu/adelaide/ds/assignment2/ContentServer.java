@@ -53,25 +53,48 @@ public class ContentServer implements Runnable {
         return reader.lines().toArray(String[]::new);
     }
 
-    private void sendPutRequest(String jsonPayload) throws IOException {
-        Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
-        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+    private void sendPutRequest(String jsonPayload) {
+        int maxRetries = 3;
+        int attempt = 0;
+        boolean success = false;
 
-        // Simulate PUT /weather.json
-        out.println("PUT /weather.json");
-        out.println("Lamport-Clock: " + clock.getTime());
-        out.println("Content-Length: " + jsonPayload.length());
-        out.println(); // End of headers
-        out.println(jsonPayload);
+        while (attempt < maxRetries && !success) {
+            try (Socket socket = new Socket(SERVER_HOST, SERVER_PORT);
+                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
-        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        String response;
-        while ((response = in.readLine()) != null) {
-            logger.info("Server response: " + response);
+                // Construct the PUT request
+                out.println("PUT /weather.json");
+                out.println("Lamport-Clock: " + clock.getTime());
+                out.println("Content-Length: " + jsonPayload.length());
+                out.println(); // End of headers
+                out.println(jsonPayload);
+
+                // Read response
+                String response;
+                while ((response = in.readLine()) != null) {
+                    logger.info("Server response: " + response);
+                }
+
+                logger.info("PUT request completed successfully.");
+                success = true;
+
+            } catch (IOException e) {
+                attempt++;
+                logger.warning("Attempt " + attempt + " failed: " + e.getMessage());
+                if (attempt < maxRetries) {
+                    logger.info("Retrying in 2 seconds...");
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt(); // Restore interrupted status
+                        return;
+                    }
+                } else {
+                    logger.severe("Failed to send PUT after " + maxRetries + " attempts.");
+                }
+            }
         }
-        logger.info("PUT request completed and socket closed.");
-        socket.close();
-
     }
 
     public static void main(String[] args) {
