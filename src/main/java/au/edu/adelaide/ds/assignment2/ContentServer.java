@@ -77,6 +77,8 @@ public class ContentServer implements Runnable {
                 connection.setDoOutput(true);
                 connection.setRequestMethod("PUT");
                 connection.setRequestProperty("Content-Type", "application/json");
+                connection.setRequestProperty("Lamport-Clock", String.valueOf(clock.getTime()));
+
                 connection.getOutputStream().write(jsonPayload.getBytes());
 
                 int responseCode = connection.getResponseCode();
