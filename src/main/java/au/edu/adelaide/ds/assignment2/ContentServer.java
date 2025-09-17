@@ -12,45 +12,58 @@ public class ContentServer implements Runnable {
     private static final Logger logger = Logger.getLogger(ContentServer.class.getName());
     private static final String SERVER_HOST = "localhost";
     private static final int SERVER_PORT = 9090;
-    private static final String WEATHER_FILE = "/weather.txt";
+
+    private final String replicaId;
+    private final String filename;
 
     private final LamportClock clock = new LamportClock();
     private final Gson gson = new Gson();
 
+    public ContentServer(String replicaId, String filename) {
+        this.replicaId = replicaId;
+        this.filename = filename;
+    }
+
     public void run() {
         try {
-            // 1. Read weather file
-            logger.info("Reading weather data from file: " + WEATHER_FILE);
+            logger.info("[" + replicaId + "] Reading weather data from file: " + filename);
             String[] weatherData = readWeatherFile();
 
-            // 2. Build JSON
+            if (weatherData == null || weatherData.length < 4) {
+                logger.warning("[" + replicaId + "] Invalid weather data format.");
+                return;
+            }
+
+            // Tick clock and build payload
             WeatherData data = new WeatherData(
                     weatherData[0],
                     weatherData[1],
                     weatherData[2],
-                    String.valueOf(clock.tick())
+                    String.valueOf(clock.tick()),
+                    replicaId
             );
 
             String jsonString = gson.toJson(data);
-            logger.info("Constructed JSON payload: " + jsonString);
+            logger.info("[" + replicaId + "] Constructed JSON payload: " + jsonString);
 
-            // 3. Send via PUT
-            logger.info("Sending PUT request to Aggregation Server at " + SERVER_HOST + ":" + SERVER_PORT);
+            // Send PUT request
+            logger.info("[" + replicaId + "] Sending PUT request to Aggregation Server at " + SERVER_HOST + ":" + SERVER_PORT);
             sendPutRequest(jsonString);
 
         } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error running content server", e);
+            logger.log(Level.SEVERE, "[" + replicaId + "] Error running content server", e);
         }
     }
 
     private String[] readWeatherFile() throws IOException {
-        InputStream inputStream = getClass().getClassLoader().getResourceAsStream("weather.txt");
+        InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
         if (inputStream == null) {
-            throw new FileNotFoundException("weather.txt not found in resources folder.");
+            throw new FileNotFoundException("Resource not found: " + filename);
         }
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-        return reader.lines().toArray(String[]::new);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+            String line = reader.readLine();
+            return (line != null) ? line.split(",") : new String[0];
+        }
     }
 
     private void sendPutRequest(String jsonPayload) {
@@ -73,7 +86,7 @@ public class ContentServer implements Runnable {
                 // Read response
                 String response;
                 while ((response = in.readLine()) != null) {
-                    logger.info("Server response: " + response);
+                    logger.info("[" + replicaId + "] Server response: " + response);
                 }
 
                 logger.info("PUT request completed successfully.");
@@ -81,9 +94,9 @@ public class ContentServer implements Runnable {
 
             } catch (IOException e) {
                 attempt++;
-                logger.warning("Attempt " + attempt + " failed: " + e.getMessage());
+                logger.warning("[" + replicaId + "] Attempt " + attempt + " failed: " + e.getMessage());
                 if (attempt < maxRetries) {
-                    logger.info("Retrying in 2 seconds...");
+                    logger.info("[" + replicaId + "] Retrying in 2 seconds...");
                     try {
                         Thread.sleep(2000);
                     } catch (InterruptedException ie) {
@@ -91,14 +104,16 @@ public class ContentServer implements Runnable {
                         return;
                     }
                 } else {
-                    logger.severe("Failed to send PUT after " + maxRetries + " attempts.");
+                    logger.severe("[" + replicaId + "] Failed to send PUT after " + maxRetries + " attempts.");
                 }
             }
         }
     }
 
     public static void main(String[] args) {
-        ContentServer server = new ContentServer();
+        String replicaId = (args.length > 0) ? args[0] : "replica1";
+        String filename = (args.length > 1) ? args[1] : "weather1.txt";
+        ContentServer server = new ContentServer(replicaId, filename);
         server.run();
     }
 }
