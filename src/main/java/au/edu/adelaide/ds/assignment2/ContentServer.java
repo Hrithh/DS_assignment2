@@ -2,10 +2,6 @@ package au.edu.adelaide.ds.assignment2;
 
 import java.io.*;
 import java.net.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
@@ -16,7 +12,7 @@ public class ContentServer implements Runnable {
     private static final Logger logger = Logger.getLogger(ContentServer.class.getName());
     private static final String SERVER_HOST = "localhost";
     private static final int SERVER_PORT = 9090;
-    private static final String WEATHER_FILE = "resources/weather.txt";
+    private static final String WEATHER_FILE = "/weather.txt";
 
     private final LamportClock clock = new LamportClock();
     private final Gson gson = new Gson();
@@ -28,14 +24,14 @@ public class ContentServer implements Runnable {
             String[] weatherData = readWeatherFile();
 
             // 2. Build JSON
-            Map<String, String> weatherJson = new HashMap<>();
+            WeatherData data = new WeatherData(
+                    weatherData[0],
+                    weatherData[1],
+                    weatherData[2],
+                    String.valueOf(clock.tick())
+            );
 
-            weatherJson.put("station", weatherData[0]);
-            weatherJson.put("temperature", weatherData[1]);
-            weatherJson.put("humidity", weatherData[2]);
-            weatherJson.put("timestamp", String.valueOf(clock.tick()));  // tick on send
-
-            String jsonString = gson.toJson(weatherJson);
+            String jsonString = gson.toJson(data);
             logger.info("Constructed JSON payload: " + jsonString);
 
             // 3. Send via PUT
@@ -48,7 +44,13 @@ public class ContentServer implements Runnable {
     }
 
     private String[] readWeatherFile() throws IOException {
-        return Files.readAllLines(Paths.get(WEATHER_FILE)).toArray(new String[0]);
+        InputStream inputStream = getClass().getResourceAsStream("/weather.txt");
+        if (inputStream == null) {
+            throw new FileNotFoundException("weather.txt not found in resources folder.");
+        }
+
+        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+        return reader.lines().toArray(String[]::new);
     }
 
     private void sendPutRequest(String jsonPayload) throws IOException {

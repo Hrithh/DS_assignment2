@@ -116,7 +116,43 @@ public class AggregationServer {
 
     private void handleGetRequest(PrintWriter out) {
         logger.info("Handling GET request...");
-        // [You will implement this in the next step]
+
+        try {
+            List<WeatherRecord> validRecords = getValidSortedRecords();
+
+            String jsonResponse = gson.toJson(validRecords);
+
+            out.println("HTTP/1.1 200 OK");
+            out.println("Content-Type: application/json");
+            out.println("Content-Length: " + jsonResponse.length());
+            out.println(); // End of headers
+            out.println(jsonResponse);
+
+            logger.info("GET response sent with " + validRecords.size() + " records.");
+
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error handling GET request", e);
+            out.println("HTTP/1.1 500 Internal Server Error");
+            out.println();
+            out.println("Error processing GET request");
+        }
+    }
+
+    private List<WeatherRecord> getValidSortedRecords() {
+        long now = System.currentTimeMillis();
+        List<WeatherRecord> validRecords = new ArrayList<>();
+
+        synchronized (weatherData) {
+            for (WeatherRecord record : weatherData) {
+                if (now - record.getReceivedTime() <= 30_000) {
+                    validRecords.add(record);
+                }
+            }
+        }
+
+        // Sort by Lamport timestamp
+        validRecords.sort(Comparator.comparingInt(WeatherRecord::getLamportTimestamp));
+        return validRecords;
     }
 
     public static void main(String[] args) {
