@@ -35,4 +35,10 @@ public class WeatherRecord {
     public long getReceivedTime() {
         return receivedTime;
     }
+
+    //debugging/logging
+    public String toString() {
+        return String.format("Station: %s, Temp: %s, Humidity: %s, Lamport: %d, Received: %d",
+                station, temperature, humidity, lamportTimestamp, receivedTime);
+    }
 }
