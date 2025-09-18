@@ -103,7 +103,7 @@ Edit `weather1.txt` to contain:
 
 **Terminal 2**
 - make content1
-<details>
+</details>
 
 ---
 
@@ -116,7 +116,7 @@ Uncomment line 153 AggregationServer.java
 - `make build`
 - `make server`
 
-<details>
+</details>
 
 ---
 
@@ -134,4 +134,4 @@ Uncomment line 153 AggregationServer.java
 - `stop server, ctrl+c`
 - `make server(restart`
 
-<details>
+</details>
