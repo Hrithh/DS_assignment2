@@ -2,6 +2,7 @@ package au.edu.adelaide.ds.assignment2;
 
 import java.io.*;
 import java.net.*;
+import java.util.*;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
@@ -9,67 +10,54 @@ import com.google.gson.Gson;
 
 /**
  * ContentServer is a replica that:
- * - Reads local weather data from a resource file
- * - Periodically sends JSON-formatted weather data via HTTP PUT
- * - Maintains and sends its Lamport timestamp for logical ordering
+ * - Reads weather data from a file (key:value entries)
+ * - Periodically sends one record as JSON via HTTP PUT
+ * - Maintains and sends Lamport timestamp for ordering
  * - Retries failed PUTs up to 3 times
  */
 public class ContentServer implements Runnable {
 
     private static final Logger logger = Logger.getLogger(ContentServer.class.getName());
-    private static final String SERVER_HOST = "localhost";
-    private static final int SERVER_PORT = 9090;
 
-    private final String replicaId;
+    private final String serverHost;
+    private final int serverPort;
     private final String filename;
+    private final String replicaId;
 
     private final LamportClock clock = new LamportClock();
     private final Gson gson = new Gson();
 
-    /**
-     * Constructs a ContentServer instance for the given replica.
-     * replicaId Unique name of this replica
-     * filename File containing weather data
-     */
-    public ContentServer(String replicaId, String filename) {
-        this.replicaId = replicaId;
+    public ContentServer(String serverHost, int serverPort, String filename, String replicaId) {
+        this.serverHost = serverHost;
+        this.serverPort = serverPort;
         this.filename = filename;
+        this.replicaId = replicaId;
     }
 
-    /**
-     * Main run loop of the content server:
-     * - Reads initial weather data from file
-     * - Sends PUT request every 10 seconds
-     * - Updates and includes Lamport clock value
-     */
+    @Override
     public void run() {
         try {
-            logger.info("[" + replicaId + "] Reading weather data from file: " + filename);
-            String[] weatherData = readWeatherFile();
-
-            if (weatherData == null || weatherData.length < 4) {
-                logger.warning("[" + replicaId + "] Invalid weather data format.");
-                return;
-            }
-
             while (true) {
-                // Tick Lamport clock and prepare data
-                WeatherData data = new WeatherData(
-                        weatherData[0],   // station
-                        weatherData[1],   // temperature
-                        weatherData[2],   // humidity
-                        String.valueOf(clock.tick()),
-                        replicaId
-                );
+                Map<String, String> record = readWeatherFile();
 
-                String jsonString = gson.toJson(data);
-                logger.info("[" + replicaId + "] Sending data: " + jsonString);
-                sendPutRequest(jsonString);
+                if (record.isEmpty()) {
+                    logger.warning("[" + replicaId + "] No valid record found in " + filename);
+                } else {
+                    // Tick Lamport once, store value
+                    int lamportValue = clock.tick();
+                    record.put("lamport", String.valueOf(lamportValue));
+                    record.put("replicaId", replicaId);
 
-                // Wait 10 seconds
-                Thread.sleep(10_000);
+                    // Convert single record to JSON
+                    String jsonPayload = gson.toJson(record);  //"{\"badField\":\"oops\"}"; for 400 test otherwise gson.toJson(record);
+                    logger.info("[" + replicaId + "] Sending payload: " + jsonPayload);
+
+                    // Pass lamportValue to PUT request
+                    sendPutRequest(jsonPayload);
+                }
+
+                Thread.sleep(10_000); // send every 10 seconds
             }
-
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             logger.warning("[" + replicaId + "] Interrupted and shutting down.");
@@ -79,26 +67,48 @@ public class ContentServer implements Runnable {
     }
 
     /**
-     * Reads the local weather data file packaged in the resources folder.
-     * Expected format: CSV, one line only: station,temperature,humidity,extra
-     * return String array of weather attributes, or empty if unreadable
+     * Reads a single weather record from a file formatted as key:value pairs.
+     * - Stops after the first valid "id:..." entry
+     * - Rejects any entry missing "id"
+     *
+     * @return Map<String, String> representing one weather record
+     * @throws IOException if file not found or invalid
      */
-    private String[] readWeatherFile() throws IOException {
-        InputStream inputStream = getClass().getClassLoader().getResourceAsStream(filename);
-        if (inputStream == null) {
-            throw new FileNotFoundException("Resource not found: " + filename);
-        }
+    private Map<String, String> readWeatherFile() throws IOException {
+        InputStream inputStream = new FileInputStream(filename); // read from filesystem
+        Map<String, String> record = new HashMap<>();
+
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
-            String line = reader.readLine();
-            return (line != null) ? line.split(",") : new String[0];
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                String[] parts = line.split(":", 2);
+                if (parts.length < 2) continue;
+
+                String key = parts[0].trim();
+                String value = parts[1].trim();
+
+                if (key.equalsIgnoreCase("id") && !record.isEmpty()) {
+                    // Found new entry → stop after the first one
+                    break;
+                }
+                record.put(key, value);
+            }
         }
+
+        // Validate required field
+        if (!record.containsKey("id")) {
+            throw new IOException("Invalid feed: missing id field");
+        }
+
+        return record;
     }
 
     /**
-     * Sends an HTTP PUT request to the AggregationServer with the given JSON payload.
-     * Retries up to 3 times if connection fails or server error occurs.
-     * Includes "Lamport-Clock" as a custom header for logical timestamp tracking.
-     * jsonPayload The serialized WeatherData JSON string
+     * Sends an HTTP PUT request with JSON payload to AggregationServer.
+     * Retries up to 3 times on failure.
      */
     private void sendPutRequest(String jsonPayload) {
         int maxRetries = 3;
@@ -106,28 +116,56 @@ public class ContentServer implements Runnable {
         boolean success = false;
 
         while (attempt < maxRetries && !success) {
-            try {
-                HttpURLConnection connection = (HttpURLConnection) new URL("http://localhost:9090").openConnection();
-                connection.setDoOutput(true);
-                connection.setRequestMethod("PUT");
-                connection.setRequestProperty("Content-Type", "application/json");
-                connection.setRequestProperty("Lamport-Clock", String.valueOf(clock.getTime()));
+            try (Socket socket = new Socket(serverHost, serverPort);
+                 PrintWriter out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
+                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
-                connection.getOutputStream().write(jsonPayload.getBytes());
+                // Build headers
+                String request =
+                        "PUT /weather.json HTTP/1.1\r\n" +
+                                "User-Agent: ATOMClient/1/0\r\n" +
+                                "Host: " + serverHost + ":" + serverPort + "\r\n" +
+                                "Content-Type: application/json\r\n" +
+                                "Content-Length: " + jsonPayload.getBytes().length + "\r\n" +
+                                "Lamport-Clock: " + clock.getTime() + "\r\n" +
+                                "\r\n" +
+                                jsonPayload;
 
-                int responseCode = connection.getResponseCode();
+                // --- Log raw request so you can compare with assignment spec ---
+                logger.info("\n--- RAW PUT REQUEST ---\n" + request + "\n------------------------");
 
-                if (responseCode == 200) {
-                    System.out.println("[" + replicaId + "] Server response: PUT received and recorded");
+                // Send request
+                out.print(request);
+                out.flush();
+
+                // Read response
+                String statusLine = in.readLine();
+                if (statusLine == null) {
+                    logger.warning("[" + replicaId + "] No response from server.");
+                    return;
+                }
+
+                if (statusLine.contains("400")) {
+                    logger.warning("[" + replicaId + "] Server rejected request (400 Bad Request)");
+                } else if (statusLine.contains("500")) {
+                    logger.severe("[" + replicaId + "] Server error (500 Internal Server Error)");
+                } else if (statusLine.contains("201")) {
+                    logger.info("[" + replicaId + "] Server accepted PUT (201 Created)");
+                    success = true;
+                } else if (statusLine.contains("200")) {
+                    logger.info("[" + replicaId + "] Server accepted PUT (200 OK)");
+                    success = true;
+                } else if (statusLine.contains("204")) {
+                    logger.info("[" + replicaId + "] No Content (204) – empty payload sent");
                     success = true;
                 } else {
-                    System.out.println("[" + replicaId + "] Server responded with: " + responseCode);
+                    logger.warning("[" + replicaId + "] Unexpected response: " + statusLine);
                 }
 
             } catch (IOException e) {
-                System.out.println("[" + replicaId + "] PUT failed (attempt " + (attempt + 1) + "): " + e.getMessage());
+                logger.warning("[" + replicaId + "] PUT failed (attempt " + (attempt + 1) + "): " + e.getMessage());
                 try {
-                    Thread.sleep(5000);  // wait 1s before retry
+                    Thread.sleep(5000);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                 }
@@ -136,25 +174,31 @@ public class ContentServer implements Runnable {
         }
 
         if (!success) {
-            System.out.println("[" + replicaId + "] PUT request failed after " + maxRetries + " attempts.");
+            logger.severe("[" + replicaId + "] PUT request failed after " + maxRetries + " attempts.");
         }
     }
 
     /**
-     * Program entry point for starting a ContentServer replica.
-     * Accepts optional CLI args:
-     * - args[0]: replicaId (default "replica1")
-     * - args[1]: filename (default "weather1.txt")
+     * Program entry point.
+     * Usage: java ContentServer <host:port> <filename> [replicaId]
      */
     public static void main(String[] args) {
-        String replicaId = (args.length > 0) ? args[0] : "replica1";
-        String filename = (args.length > 1) ? args[1] : "weather1.txt";
+        if (args.length < 2) {
+            System.err.println("Usage: java ContentServer <host:port> <filename> [replicaId]");
+            return;
+        }
 
-        ContentServer server = new ContentServer(replicaId, filename);
+        String[] hostPort = args[0].split(":");
+        String serverHost = hostPort[0];
+        int serverPort = Integer.parseInt(hostPort[1]);
+
+        String filename = args[1];
+        String replicaId = (args.length > 2) ? args[2] : "replica1";
+
+        ContentServer server = new ContentServer(serverHost, serverPort, filename, replicaId);
         Thread serverThread = new Thread(server);
         serverThread.start();
 
-        // Add shutdown hook to log termination
         Runtime.getRuntime().addShutdownHook(new Thread(() ->
                 System.out.println("[" + replicaId + "] Content server stopped.")
         ));

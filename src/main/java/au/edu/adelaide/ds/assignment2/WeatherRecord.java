@@ -1,21 +1,34 @@
 package au.edu.adelaide.ds.assignment2;
 
+/**
+ * WeatherRecord represents a single weather entry stored in the AggregationServer.
+ * It holds:
+ * - station ID (id from content server)
+ * - temperature
+ * - humidity
+ * - replicaId (optional, for tracking which content server sent it)
+ * - Lamport timestamp (for ordering)
+ * - receivedTime (for 30s expiry)
+ */
 public class WeatherRecord {
-    private final String station;
-    private final String temperature;
-    private final String humidity;
-    private final int lamportTimestamp;
-    private final long receivedTime; // Used for 30s expiry
+    private final String station;           // station ID
+    private final String temperature;       // air_temp
+    private final String humidity;          // rel_hum
+    private final String replicaId;         // optional, which content server sent it
+    private final int lamportTimestamp;     // Lamport logical clock
+    private final long receivedTime;        // used for expiry
 
-    public WeatherRecord(String station, String temperature, String humidity, int lamportTimestamp, long receivedTime) {
+    public WeatherRecord(String station, String temperature, String humidity,
+                         String replicaId, int lamportTimestamp, long receivedTime) {
         this.station = station;
         this.temperature = temperature;
         this.humidity = humidity;
+        this.replicaId = replicaId;
         this.lamportTimestamp = lamportTimestamp;
         this.receivedTime = receivedTime;
     }
 
-    // Getters
+    // --- Getters ---
     public String getStation() {
         return station;
     }
@@ -28,6 +41,10 @@ public class WeatherRecord {
         return humidity;
     }
 
+    public String getReplicaId() {
+        return replicaId;
+    }
+
     public int getLamportTimestamp() {
         return lamportTimestamp;
     }
@@ -36,9 +53,12 @@ public class WeatherRecord {
         return receivedTime;
     }
 
-    //debugging/logging
+    // --- For debugging/logging ---
+    @Override
     public String toString() {
-        return String.format("Station: %s, Temp: %s, Humidity: %s, Lamport: %d, Received: %d",
-                station, temperature, humidity, lamportTimestamp, receivedTime);
+        return String.format(
+                "Station: %s, Temp: %s, Humidity: %s, Replica: %s, Lamport: %d, Received: %d",
+                station, temperature, humidity, replicaId, lamportTimestamp, receivedTime
+        );
     }
 }

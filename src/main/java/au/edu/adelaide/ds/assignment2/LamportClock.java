@@ -54,6 +54,14 @@ public class LamportClock {
     }
 
     /**
+     * Sets the Lamport clock to a specific value.
+     * Useful for restoring from persistent storage.
+     */
+    public void setTime(int value) {
+        clock.set(value);
+    }
+
+    /**
      * Converts the current clock value to a string.
      * Useful for logging/debugging.
      * return String representation of the timestamp
