@@ -24,17 +24,17 @@ Make sure you're inside the `DS_AT2` project root.
 
 ### 1. **Start the Aggregation Server**
 
-mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.AggregationServer"
+`make server`
 
 ### 2. **Start a Content Server (Replica)**
 
 You can run multiple replicas using different IDs and input files
 
 first replica
-mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.ContentServer" "-Dexec.args=replica1 weather1.txt"
+`make content1`
 
-second replica
-mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.ContentServer" "-Dexec.args=replica2 weather2.txt"
+second replica 
+`make content2`
 
 Each Content Server:
 - Reads local weather data from a file
@@ -43,7 +43,7 @@ Each Content Server:
 
 ### 3. **Start the Client**
 
-mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.GETClient"
+`make client`
 
 ---
 
