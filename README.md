@@ -139,22 +139,6 @@ Uncomment line 153 AggregationServer.java
 
 </details>
 
-<details>
-  <summary><strong>5. Persistence Test</strong></summary>
-
-**Terminal 1**
-- `make build`
-- `make server`
-
-**Terminal 2**
-- `make content`
-
-**Terminal 1**
-- `stop server, ctrl+c`
-- `make server(restart`
-
-</details>
-
 ---
 
 <details>
