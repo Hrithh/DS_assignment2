@@ -46,6 +46,47 @@ Each Content Server:
 mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.GETClient"
 
 ---
+## Test Procedure
+
+<details>
+  <summary><strong>1. 201 Created / 200 OK</strong></summary>
+
+**Terminal 1**
+- `make build`
+- `make server`
+
+**Terminal 2**
+- `make content1`
+
+**Terminal 3**
+- `make client`
+
+👉 First PUT → server responds **201 Created**  
+👉 Subsequent PUTs (same station) → server responds **200 OK**
+
+</details>
+
+---
+
+<details>
+  <summary><strong>2. 204 No Content (30s expiry)</strong></summary>
+
+**Terminal 1**
+- `make build`
+- `make server`
+
+**Terminal 2**
+- `make content1`
+- After few updates, `ctrl+c`
+
+⏳ Wait 30s (expiry timeout)
+
+**Terminal 3**
+- `make client`
+
+👉 Server responds **204 No Content**
+
+</details>
 
 ## Test Procedure
 
