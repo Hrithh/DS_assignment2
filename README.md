@@ -30,10 +30,10 @@ Make sure you're inside the `DS_AT2` project root.
 
 You can run multiple replicas using different IDs and input files
 
-first replica
+first replica:  
 `make content1`
 
-second replica 
+second replica:  
 `make content2`
 
 Each Content Server:
