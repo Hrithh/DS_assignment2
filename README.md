@@ -47,4 +47,69 @@ mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.GETClient"
 
 ---
 
+## Test Procedure
+
+### 1. 201 Created / 200 OK 
+
+Terminal 1
+- make build
+- make server
+
+Terminal 2  
+- make content1
+
+Terminal 3
+- make client
+
+First PUT -> server responds 201 Created
+Subsequent PUTs(same station)->server responds 200 OK
+
+### 2. 204 No Content (30s expiry)
+
+Terminal 1
+- make build
+- make server
+
+Terminal 2
+- make content1
+- After few updates, ctrl+c
+
+Wait 30s(expiry timeout)
+
+Terminal 3
+- make client
+
+### 3. 400 Bad Request
+
+Terminal 1
+- make build
+- make server
+
+Edit weather1.txt to contain:
+{"badField": "oops"}
+
+Terminal 2
+- make content1
+
+### 4. 500 Internal Server Error
+
+Uncomment line 153 AggregationServer.java
+
+Terminal 1
+- make build
+- make server
+
+### 5. Persistence Test
+
+Terminal 1
+- make build
+- make server
+
+Terminal 2
+- make content1
+
+Terminal 1
+- stop server, ctrl+c
+- make server (restart)
+
 
