@@ -113,7 +113,7 @@ Edit `weather1.txt` to contain:
 <details>
   <summary><strong>4. 500 Internal Server Error</strong></summary>
 
-Uncomment line 153 AggregationServer.java
+Uncomment line 145 AggregationServer.java
 
 **Terminal 1**
 - `make build`
