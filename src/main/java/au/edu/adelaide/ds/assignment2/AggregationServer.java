@@ -5,39 +5,41 @@ import java.net.*;
 import java.util.concurrent.*;
 import java.util.*;
 import java.util.logging.*;
-import com.google.gson.reflect.TypeToken;
+
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 /**
  * AggregationServer stores weather data sent by ContentServers and
  * provides aggregated JSON data to GETClients.
- *
+ * .
  * Features:
  * - Persistent storage with crash recovery
  * - Lamport clock for logical ordering
- * - Status codes: 201 (Created), 200 (OK), 204 (No Content),
+ * - HTTP-like status codes:
+ *   201 (Created), 200 (OK), 204 (No Content),
  *   400 (Bad Request), 500 (Internal Server Error)
- * - Removes expired records (30s) with cleanup thread
+ * - Removes expired records (30s) using a background cleanup thread
  */
 public class AggregationServer {
 
-    private final int port;
     private static final Logger logger = Logger.getLogger(AggregationServer.class.getName());
-
     private static final String DATA_FILE = "weather_data.json";
     private static final long EXPIRY_DURATION_MS = 30_000; // 30 seconds
     private static final long CLEANUP_INTERVAL_MS = 5000;  // 5 seconds
 
-    private final List<WeatherRecord> weatherData =
-            Collections.synchronizedList(new ArrayList<>());
+    private final int port;
+    private final List<WeatherRecord> weatherData = Collections.synchronizedList(new ArrayList<>());
     private final LamportClock clock = new LamportClock();
     private final Gson gson = new Gson();
 
-    private boolean filePreviouslyCreated;
-
+    /**
+     * Constructs an AggregationServer listening on the given port.
+     *
+     * @param port TCP port for server to listen on
+     */
     public AggregationServer(int port) {
         this.port = port;
-        this.filePreviouslyCreated = new File(DATA_FILE).exists();
     }
 
     /**
@@ -63,7 +65,10 @@ public class AggregationServer {
         }
     }
 
-    /** Periodically removes expired records and persists the file. */
+    /**
+     * Starts a background thread that periodically removes expired records
+     * (older than EXPIRY_DURATION_MS) and persists updates to disk.
+     */
     private void startCleanupThread() {
         Thread cleanupThread = new Thread(() -> {
             while (true) {
@@ -125,17 +130,14 @@ public class AggregationServer {
     }
 
     /**
-     * Handles HTTP PUT requests from ContentServers.
-     * - Reads headers and payload
-     * - Updates Lamport clock
-     * - Parses JSON (object or array)
-     * - Stores weather records
-     * - Returns proper status codes:
-     *   201 if first time a record from this station,
-     *   200 if update,
-     *   204 if empty payload,
-     *   400 if bad request/missing headers,
-     *   500 if malformed JSON
+     * Handles HTTP-like PUT requests from ContentServers.
+     * <p>
+     * Status codes:
+     * - 201 → First time a record from this station
+     * - 200 → Update to existing station
+     * - 204 → Empty payload
+     * - 400 → Missing headers / bad request
+     * - 500 → Malformed JSON / unexpected error
      */
     private void handlePutRequest(BufferedReader in, PrintWriter out) throws IOException {
         try {
@@ -222,9 +224,11 @@ public class AggregationServer {
     }
 
     /**
-     * Helper: process a single JSON record and store it.
-     * Returns true if this is the first time the station is seen (→ 201),
-     * false if it’s an update (→ 200).
+     * Processes a single JSON weather record.
+     *
+     * @param json map containing parsed weather record fields
+     * @return true if this is the first record from the station (201),
+     *         false if it was an update (200)
      */
     private boolean processRecord(Map<String, Object> json) {
         try {
@@ -267,7 +271,11 @@ public class AggregationServer {
         }
     }
 
-    /** Handles GET: filters expired records, sorts by Lamport, returns JSON. */
+    /**
+     * Handles HTTP-like GET requests.
+     * - Returns 204 if no records exist
+     * - Otherwise returns JSON array of records (200 OK)
+     */
     private void handleGetRequest(PrintWriter out) {
         List<WeatherRecord> snapshot;
         synchronized (weatherData) {
@@ -331,7 +339,10 @@ public class AggregationServer {
         }
     }
 
-    /** Loads existing data from file at startup (if any). */
+    /**
+     * Loads persisted data from disk (if any).
+     * Restores weather records and Lamport clock value.
+     */
     private synchronized void loadFromFile() {
         File file = new File(DATA_FILE);
         if (!file.exists()) return;

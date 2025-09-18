@@ -21,7 +21,7 @@ content2:
 client:
 	mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.GETClient" "-Dexec.args=localhost:4567"
 
-# Kill stray Java processes (useful if something hangs)
+# Kill stray Java processes (if hangs)
 kill:
 	@echo ">>> Killing Java processes..."
 	@pkill -f "au.edu.adelaide.ds.assignment2" || true

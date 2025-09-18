@@ -13,11 +13,14 @@ import com.google.gson.Gson;
  * - Reads weather data from a file (key:value entries)
  * - Periodically sends one record as JSON via HTTP PUT
  * - Maintains and sends Lamport timestamp for ordering
- * - Retries failed PUTs up to 3 times
+ * - Retries failed PUTs up to 3 times (per update)
  */
 public class ContentServer implements Runnable {
 
     private static final Logger logger = Logger.getLogger(ContentServer.class.getName());
+    private static final int UPDATE_INTERVAL_MS = 10_000;   // send every 10 seconds
+    private static final int RETRY_DELAY_MS = 5_000;        // retry after 5 seconds
+    private static final int MAX_RETRIES = 3;
 
     private final String serverHost;
     private final int serverPort;
@@ -48,15 +51,15 @@ public class ContentServer implements Runnable {
                     record.put("lamport", String.valueOf(lamportValue));
                     record.put("replicaId", replicaId);
 
-                    // Convert single record to JSON
-                    String jsonPayload = gson.toJson(record);  //"{\"badField\":\"oops\"}"; for 400 test otherwise gson.toJson(record);
+                    // Serialize to JSON
+                    String jsonPayload = gson.toJson(record);   //"{\"badField\":\"oops\"}"; for 400 test otherwise gson.toJson(record);
                     logger.info("[" + replicaId + "] Sending payload: " + jsonPayload);
 
-                    // Pass lamportValue to PUT request
+                    // Attempt PUT
                     sendPutRequest(jsonPayload);
                 }
 
-                Thread.sleep(10_000); // send every 10 seconds
+                Thread.sleep(UPDATE_INTERVAL_MS);   // send every 10 seconds
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -68,14 +71,10 @@ public class ContentServer implements Runnable {
 
     /**
      * Reads a single weather record from a file formatted as key:value pairs.
-     * - Stops after the first valid "id:..." entry
-     * - Rejects any entry missing "id"
-     *
-     * @return Map<String, String> representing one weather record
-     * @throws IOException if file not found or invalid
+     * Stops after first full record (delimited by new "id:...").
      */
     private Map<String, String> readWeatherFile() throws IOException {
-        InputStream inputStream = new FileInputStream(filename); // read from filesystem
+        InputStream inputStream = new FileInputStream(filename);    // read from filesystem
         Map<String, String> record = new HashMap<>();
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
@@ -91,8 +90,7 @@ public class ContentServer implements Runnable {
                 String value = parts[1].trim();
 
                 if (key.equalsIgnoreCase("id") && !record.isEmpty()) {
-                    // Found new entry → stop after the first one
-                    break;
+                    break;  // Stop if a new record starts
                 }
                 record.put(key, value);
             }
@@ -111,11 +109,10 @@ public class ContentServer implements Runnable {
      * Retries up to 3 times on failure.
      */
     private void sendPutRequest(String jsonPayload) {
-        int maxRetries = 3;
         int attempt = 0;
         boolean success = false;
 
-        while (attempt < maxRetries && !success) {
+        while (attempt < MAX_RETRIES && !success) {
             try (Socket socket = new Socket(serverHost, serverPort);
                  PrintWriter out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
                  BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
@@ -131,7 +128,7 @@ public class ContentServer implements Runnable {
                                 "\r\n" +
                                 jsonPayload;
 
-                // --- Log raw request so you can compare with assignment spec ---
+                // Log raw request
                 logger.info("\n--- RAW PUT REQUEST ---\n" + request + "\n------------------------");
 
                 // Send request
@@ -165,7 +162,7 @@ public class ContentServer implements Runnable {
             } catch (IOException e) {
                 logger.warning("[" + replicaId + "] PUT failed (attempt " + (attempt + 1) + "): " + e.getMessage());
                 try {
-                    Thread.sleep(5000);
+                    Thread.sleep(RETRY_DELAY_MS);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                 }
@@ -174,7 +171,7 @@ public class ContentServer implements Runnable {
         }
 
         if (!success) {
-            logger.severe("[" + replicaId + "] PUT request failed after " + maxRetries + " attempts.");
+            logger.severe("[" + replicaId + "] PUT request failed after " + MAX_RETRIES + " attempts.");
         }
     }
 
