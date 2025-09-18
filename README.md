@@ -142,7 +142,7 @@ Uncomment line 153 AggregationServer.java
 ---
 
 <details>
-  <summary><strong>Multiple Content Servers (Replication / Fault Tolerance)</strong></summary>>
+  <summary><strong>Multiple Content Servers (Replication / Fault Tolerance)</strong></summary>
 
 - `Start two ContentServers (replica1 and replica2) with different input files.`
 - `Confirm that GETClient shows both stations.`
