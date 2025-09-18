@@ -83,7 +83,7 @@ Subsequent PUTs (same station) → server responds **200 OK**
 - `make content1`
 - After few updates, `ctrl+c`
 
-⏳ Wait 30s (expiry timeout)
+Wait 30s (expiry timeout)
 
 **Terminal 3**
 - `make client`
@@ -136,5 +136,88 @@ Uncomment line 153 AggregationServer.java
 **Terminal 1**
 - `stop server, ctrl+c`
 - `make server(restart`
+
+</details>
+
+<details>
+  <summary><strong>5. Persistence Test</strong></summary>
+
+**Terminal 1**
+- `make build`
+- `make server`
+
+**Terminal 2**
+- `make content`
+
+**Terminal 1**
+- `stop server, ctrl+c`
+- `make server(restart`
+
+</details>
+
+---
+
+<details>
+  <summary><strong>Multiple Content Servers (Replication / Fault Tolerance)</strong></summary>>
+
+- `Start two ContentServers (replica1 and replica2) with different input files.`
+- `Confirm that GETClient shows both stations.`
+- `Kill one replica → wait 30s → confirm expired records disappear while the other replica’s remain.`
+- `This shows your system handles multiple sources and expiry correctly.`
+
+</details>
+
+---
+
+<details>
+  <summary><strong>Lamport Clock Ordering</strong></summary>
+
+- `Start content1 and content2 simultaneously.`
+- `Confirm that GETClient shows records sorted by Lamport timestamp, not by arrival order.`
+- `Useful to prove logical time ordering works across replicas.`
+
+</details>
+
+---
+
+<details>
+  <summary><strong>Invalid File / Missing ID (Content Server)</strong></summary>
+
+- `Modify weather1.txt to remove the id: line.`
+- `ContentServer should refuse to send or AggregationServer should reject with 400 Bad Request.`
+- `This checks validation of the input feed.`
+
+</details>
+
+---
+
+<details>
+  <summary><strong>Crash Recovery (Persistence)</strong></summary>
+
+- `Start content1 → let it send data → stop AggregationServer.`
+- `Restart AggregationServer.`
+- `Confirm weather_data.json restores into memory and GETClient can still fetch old records.`
+
+</details>
+
+---
+
+<details>
+  <summary><strong>Expiry Without Restart</strong></summary>
+
+- `Run content1 → stop it after one update.`
+- `Wait 30s.`
+- `Run GETClient.`
+- `Confirm expired data is gone and GETClient shows 204 No Content if no replicas are alive.`
+
+</details>
+
+---
+
+<details>
+  <summary><strong>Edge Case: Empty File</strong></summary>
+
+- `Provide a weather.txt file with only whitespace.`
+- `ContentServer should fail gracefully or AggregationServer should return 204 No Content.`
 
 </details>
