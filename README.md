@@ -24,11 +24,13 @@ Make sure you're inside the `DS_AT2` project root.
 
 ### 1. **Start the Aggregation Server**
 
+`mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.AggregationServer"`  
 `make server`
 
 ### 2. **Start a Content Server (Replica)**
 
-You can run multiple replicas using different IDs and input files
+You can run multiple replicas using different IDs and input files:  
+`mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.ContentServer" "-Dexec.args=localhost:4567 weather1.txt replica1"`
 
 first replica:  
 `make content1`
@@ -43,6 +45,7 @@ Each Content Server:
 
 ### 3. **Start the Client**
 
+`mvn exec:java "-Dexec.mainClass=au.edu.adelaide.ds.assignment2.GETClient" "-Dexec.args=localhost:4567"`  
 `make client`
 
 ---
